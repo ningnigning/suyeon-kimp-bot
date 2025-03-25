@@ -1,3 +1,5 @@
+# 수연이 자동화 앱 (Binance 연결은 루프 진입 시점에만!)
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,32 +7,9 @@ from datetime import datetime, date
 import requests
 import matplotlib
 import json
-from binance.client import Client
-
-# Binance API 키
 import os
-from binance.client import Client
+import random
 
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
-BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
-
-try:
-    client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
-    client.ping()
-except Exception as e:
-    import streamlit as st
-    st.error("❌ Binance API 연결에 실패했어요!")
-    st.stop()
-
-
-if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
-    st.error("❌ Binance API 키가 제대로 불러와지지 않았어요. Streamlit Secrets를 확인해주세요.")
-    st.stop()
-else:
-    client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
-
-
-# 한글 깨짐 방지
 matplotlib.rcParams['font.family'] = 'AppleGothic'
 matplotlib.rcParams['axes.unicode_minus'] = False
 
@@ -66,7 +45,21 @@ def send_telegram_alert(message):
     data = {"chat_id": CHAT_ID, "text": message}
     requests.post(url, data=data)
 
-# 앱 상태 초기화
+# Binance 주문 함수 → 루프 실행 시점에만 초기화
+def place_market_buy(symbol="BTCUSDT", quantity=0.001):
+    from binance.client import Client
+    try:
+        BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+        BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
+        if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
+            return "❌ Binance 키가 설정되지 않았습니다.", None
+        client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+        order = client.order_market_buy(symbol=symbol, quantity=quantity)
+        return "✅ 실전 주문 성공", order
+    except Exception as e:
+        return f"❌ 주문 실패: {str(e)}", None
+
+# 상태 초기화
 if "loop_data" not in st.session_state:
     st.session_state.loop_data = []
     st.session_state.capital = 33000000
@@ -75,25 +68,24 @@ if "last_run_date" not in st.session_state:
     st.session_state.last_run_date = None
     st.session_state.loop_executed = False
 
-# 자정 기준 루프 리셋
+# 자정 기준 리셋
 today = date.today()
 if st.session_state.last_run_date != today:
     st.session_state.loop_executed = False
     st.session_state.last_run_date = today
 
-# 앱 제목
-st.set_page_config(page_title="수연이 루프 자동화 시스템", layout="centered")
-st.title("💖 수연이 환전 루프 자동화 + 조건 감지 대시보드")
+# 앱 시작
+st.set_page_config(page_title="수연이 자동화", layout="centered")
+st.title("💖 수연이 실전 자동 루프 시스템")
 
-# 실시간 환율 + 시세
+# 실시간 데이터
 krw_rate, fx_time = get_realtime_fx()
-krw_buy = krw_rate * 1.0005  # 삼성증권 환전 수수료 반영
+krw_buy = krw_rate * 1.0005
 krw_sell = krw_rate
-
 binance_price = get_binance_price()
 upbit_price = get_upbit_price()
 
-st.subheader(f"📈 실시간 시세 & 환율 (업데이트: {fx_time.strftime('%Y-%m-%d')})")
+st.subheader(f"📈 실시간 시세 & 환율 (기준일: {fx_time.strftime('%Y-%m-%d')})")
 if binance_price and upbit_price:
     st.metric("Binance BTC", f"${binance_price:,.2f}")
     st.metric("Upbit BTC", f"₩{int(upbit_price):,}")
@@ -101,34 +93,32 @@ if binance_price and upbit_price:
     st.metric("김치프리미엄", f"{kimp:.2f}%")
 else:
     kimp = 0
-    st.warning("실시간 시세 불러오기 실패")
+    st.warning("실시간 시세 로딩 실패")
 
-# 수수료 입력
+# 수수료
 fee_fx = st.number_input("환전 수수료율 (%)", value=0.05) / 100
 fee_binance = st.number_input("Binance 거래 수수료율 (%)", value=0.075) / 100
 fee_upbit = st.number_input("Upbit 매도 수수료율 (%)", value=0.05) / 100
 
-# 환전 루프 시뮬레이션
-st.subheader("💸 환전 루프 수익 시뮬레이션")
+# 루프 시뮬레이션
+st.subheader("💸 루프 수익 시뮬레이션")
 initial_krw = st.number_input("₩ 보유 원화 입력", value=33000000)
-
 if binance_price and upbit_price:
     usd_after = (initial_krw / krw_buy) * (1 - fee_fx)
     btc_buy = (usd_after / binance_price) * (1 - fee_binance)
     krw_out = btc_buy * upbit_price * (1 - fee_upbit)
     profit = krw_out - initial_krw
     real_rate = profit / initial_krw
-
     st.metric("1️⃣ 환전 후 달러", f"${usd_after:,.2f}")
     st.metric("2️⃣ Binance BTC 매입량", f"{btc_buy:.6f} BTC")
     st.metric("3️⃣ 업비트 원화 수령액", f"₩{int(krw_out):,}")
     st.metric("💰 루프 수익", f"₩{int(profit):,}")
     st.metric("📈 실질 수익률", f"{real_rate*100:.2f}%")
 else:
-    st.error("실시간 시세를 불러올 수 없습니다.")
+    st.error("시세 불러오기 실패")
 
-# 루프 조건 감지 + 실행
-st.subheader("🔥 자동 루프 조건 감지 및 실행")
+# 조건 감지 실행
+st.subheader("🔥 자동 루프 감지 & 실행")
 kimp_rate = st.number_input("김프 수익률 (%)", value=3.0, step=0.01)
 fee_total = fee_fx + fee_binance + fee_upbit
 real_rate = (kimp_rate - fee_total * 100) / 100
@@ -148,23 +138,27 @@ if real_rate >= 0.02 and (krw_buy - krw_sell) <= 10:
         })
         st.session_state.loop_executed = True
         send_telegram_alert(f"✅ 루프 #{st.session_state.loops} 실행됨! 수익률 {real_rate*100:.2f}% 자산 ₩{int(new_cap):,}")
+
+        # Binance 주문은 이 시점에만!
+        if not simulation_mode:
+            msg, result = place_market_buy()
+            st.write(msg)
 else:
     st.info("복합 조건 미충족 → 대기 중")
 
-# 리포트
-st.subheader("📊 누적 자산 변화 리포트")
+# 자산 리포트
+st.subheader("📊 누적 자산 리포트")
 st.metric("누적 루프 수", st.session_state.loops)
 st.metric("누적 자산 (₩)", f"{int(st.session_state.capital):,}")
 if st.session_state.loop_data:
     df = pd.DataFrame(st.session_state.loop_data)
-    fig2, ax2 = plt.subplots()
-    ax2.plot(df["회전"], df["자산(₩)"], marker='o', color='hotpink')
-    ax2.set_xlabel("회전")
-    ax2.set_ylabel("자산(₩)")
-    ax2.grid(True)
-    st.pyplot(fig2)
+    fig, ax = plt.subplots()
+    ax.plot(df["회전"], df["자산(₩)"], marker='o', color='hotpink')
+    ax.set_xlabel("회전")
+    ax.set_ylabel("자산(₩)")
+    ax.grid(True)
+    st.pyplot(fig)
     st.dataframe(df)
     csv = df.to_csv(index=False).encode('utf-8-sig')
     st.download_button("📥 루프 로그 다운로드", csv, "loop_record.csv")
-
 
