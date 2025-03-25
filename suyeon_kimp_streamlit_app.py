@@ -8,9 +8,11 @@ import json
 from binance.client import Client
 
 # Binance API 키
-BINANCE_API_KEY = "eMsJqhbDM0rYNcI81NNHbJP2cL0wXHWKVKfqLAX9j3H08SbqxvDDOGcxf2Qu0AMn"
-BINANCE_SECRET_KEY = "kbqxwcZ7QHIwl7iHF22cgQvxKZ6sIrBKFfDn6GOLxVKsooAXcopVbZa1UMhEwRcN"
+import os
+BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+
 
 # 한글 깨짐 방지
 matplotlib.rcParams['font.family'] = 'AppleGothic'
