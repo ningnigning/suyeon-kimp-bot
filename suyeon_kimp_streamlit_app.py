@@ -14,6 +14,15 @@ from binance.client import Client
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
 
+try:
+    client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+    client.ping()
+except Exception as e:
+    import streamlit as st
+    st.error("❌ Binance API 연결에 실패했어요!")
+    st.stop()
+
+
 if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
     st.error("❌ Binance API 키가 제대로 불러와지지 않았어요. Streamlit Secrets를 확인해주세요.")
     st.stop()
