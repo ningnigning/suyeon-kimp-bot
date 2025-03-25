@@ -9,9 +9,16 @@ from binance.client import Client
 
 # Binance API 키
 import os
+from binance.client import Client
+
 BINANCE_API_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET_KEY = os.getenv("BINANCE_SECRET_KEY")
-client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+
+if not BINANCE_API_KEY or not BINANCE_SECRET_KEY:
+    st.error("❌ Binance API 키가 제대로 불러와지지 않았어요. Streamlit Secrets를 확인해주세요.")
+    st.stop()
+else:
+    client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
 
 
 # 한글 깨짐 방지
